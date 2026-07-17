@@ -1,0 +1,1 @@
+ALTER TABLE public.pump_settings ADD COLUMN IF NOT EXISTS pump_status text NOT NULL DEFAULT 'OFF';
