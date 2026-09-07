@@ -25,7 +25,7 @@ export function useLatestSensorData() {
   useEffect(() => {
     fetch();
     const channel = supabase
-      .channel('sensor_realtime')
+      .channel(`sensor_realtime_${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'sensor_data' }, (payload) => {
         const newRow = payload.new as unknown as SensorData;
         if (!device || newRow.device_id === device.id) {
@@ -89,7 +89,7 @@ export function usePumpSettings() {
   useEffect(() => {
     fetchSettings();
     const channel = supabase
-      .channel('pump_settings_realtime')
+      .channel(`pump_settings_realtime_${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pump_settings' }, (payload) => {
         const updated = payload.new as unknown as PumpSettings;
         if (!device || updated.device_id === device.id) {
@@ -158,7 +158,7 @@ export function useAlerts() {
     });
 
     const channel = supabase
-      .channel('alerts_realtime')
+      .channel(`alerts_realtime_${Math.random().toString(36).slice(2)}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'alerts' }, (payload) => {
         const newAlert = payload.new as unknown as Alert;
         if (!device || newAlert.device_id === device.id) {

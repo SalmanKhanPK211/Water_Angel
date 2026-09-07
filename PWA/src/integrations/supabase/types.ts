@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -67,9 +67,54 @@ export type Database = {
           },
         ]
       }
+      daily_usage: {
+        Row: {
+          capacity_liters_snapshot: number
+          created_at: string
+          device_id: string
+          id: string
+          liters_used: number
+          percent_used: number
+          readings_count: number
+          updated_at: string
+          usage_date: string
+        }
+        Insert: {
+          capacity_liters_snapshot?: number
+          created_at?: string
+          device_id: string
+          id?: string
+          liters_used?: number
+          percent_used?: number
+          readings_count?: number
+          updated_at?: string
+          usage_date: string
+        }
+        Update: {
+          capacity_liters_snapshot?: number
+          created_at?: string
+          device_id?: string
+          id?: string
+          liters_used?: number
+          percent_used?: number
+          readings_count?: number
+          updated_at?: string
+          usage_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_usage_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devices: {
         Row: {
           calibration_mode: boolean
+          capacity_liters: number | null
           created_at: string
           device_name: string | null
           id: string
@@ -81,6 +126,7 @@ export type Database = {
         }
         Insert: {
           calibration_mode?: boolean
+          capacity_liters?: number | null
           created_at?: string
           device_name?: string | null
           id?: string
@@ -92,6 +138,7 @@ export type Database = {
         }
         Update: {
           calibration_mode?: boolean
+          capacity_liters?: number | null
           created_at?: string
           device_name?: string | null
           id?: string
@@ -102,6 +149,56 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      ml_predictions: {
+        Row: {
+          confidence: number | null
+          created_at: string
+          device_id: string
+          id: string
+          metadata: Json
+          model_version: string
+          predicted_value: number | null
+          prediction_date: string
+          prediction_type: string
+          target_date: string | null
+          target_time: string | null
+        }
+        Insert: {
+          confidence?: number | null
+          created_at?: string
+          device_id: string
+          id?: string
+          metadata?: Json
+          model_version?: string
+          predicted_value?: number | null
+          prediction_date?: string
+          prediction_type: string
+          target_date?: string | null
+          target_time?: string | null
+        }
+        Update: {
+          confidence?: number | null
+          created_at?: string
+          device_id?: string
+          id?: string
+          metadata?: Json
+          model_version?: string
+          predicted_value?: number | null
+          prediction_date?: string
+          prediction_type?: string
+          target_date?: string | null
+          target_time?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ml_predictions_device_id_fkey"
+            columns: ["device_id"]
+            isOneToOne: false
+            referencedRelation: "devices"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -257,8 +354,10 @@ export type Database = {
     }
     Functions: {
       admin_exists: { Args: never; Returns: boolean }
+      backfill_daily_usage: { Args: never; Returns: number }
       claim_first_admin: { Args: never; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
+      rollup_daily_usage: { Args: { p_day?: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never
@@ -277,12 +376,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -306,11 +405,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -331,11 +430,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -356,11 +455,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -373,11 +472,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

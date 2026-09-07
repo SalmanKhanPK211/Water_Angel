@@ -102,19 +102,26 @@ const ControlPage = () => {
       return;
     }
     try {
+      // 1. Persist the commanded state (source of truth the firmware polls)
       await updateSettings({ pump_mode: 'MANUAL', pump_status: status });
       setIsAuto(false);
 
-      await supabase
+      // 2. Queue the command on the device row so firmware can react immediately
+      const { error: cmdError } = await supabase
         .from('devices')
-        .update({ pending_command: null } as any)
+        .update({ pending_command: status === 'ON' ? 'pump_on' : 'pump_off' } as any)
         .eq('id', device.id);
 
-      toast.success(`Pump ${status} saved to device settings`);
+      if (cmdError) throw cmdError;
+
+      toast.success(`Pump ${status} command sent`, {
+        description: 'Waiting for the device to apply it',
+      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : `Failed to turn pump ${status}`);
     }
   };
+
 
   const handleSaveTankHeight = async () => {
     if (!device) {
@@ -180,20 +187,32 @@ const ControlPage = () => {
           <div className="water-card space-y-4 animate-fade-in">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-foreground">Manual Control</h3>
-              <Badge
-                variant="outline"
-                className={
-                  latestSensor?.pump_status === 'ON'
-                    ? 'border-safe text-safe'
-                    : 'border-muted-foreground text-muted-foreground'
-                }
-              >
-                {latestSensor?.pump_status === 'ON' ? (
-                  <><CheckCircle2 className="h-3 w-3 mr-1" /> Pump ON</>
-                ) : (
-                  <><AlertCircle className="h-3 w-3 mr-1" /> Pump OFF</>
-                )}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={
+                    settings?.pump_status === 'ON'
+                      ? 'border-primary text-primary'
+                      : 'border-muted-foreground text-muted-foreground'
+                  }
+                >
+                  Commanded: {settings?.pump_status === 'ON' ? 'ON' : 'OFF'}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={
+                    latestSensor?.pump_status === 'ON'
+                      ? 'border-safe text-safe'
+                      : 'border-muted-foreground text-muted-foreground'
+                  }
+                >
+                  {latestSensor?.pump_status === 'ON' ? (
+                    <><CheckCircle2 className="h-3 w-3 mr-1" /> Device ON</>
+                  ) : (
+                    <><AlertCircle className="h-3 w-3 mr-1" /> Device OFF</>
+                  )}
+                </Badge>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <Button
@@ -212,6 +231,7 @@ const ControlPage = () => {
                 Turn OFF
               </Button>
             </div>
+
           </div>
         )}
 

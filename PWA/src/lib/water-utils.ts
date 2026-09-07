@@ -48,3 +48,13 @@ export function getSeverityIcon(severity: string): string {
     default: return '🔵';
   }
 }
+
+/** Convert a tank level percentage to litres using the device's configured capacity. */
+export function litersFromPercent(levelPercent: number, capacityLiters: number): number {
+  return (levelPercent * capacityLiters) / 100;
+}
+
+export function formatLiters(liters: number): string {
+  return `${Math.round(liters).toLocaleString()} L`;
+}
+

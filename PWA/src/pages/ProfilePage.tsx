@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 
 const ProfilePage = () => {
   const { user, signOut } = useAuth();
-  const { device, loading: deviceLoading, pairDevice, unpairDevice, updateDeviceName, refetch: refetchDevice } = useDevice();
+  const { device, loading: deviceLoading, pairDevice, unpairDevice, updateDeviceName, updateCapacity, refetch: refetchDevice } = useDevice();
   const { isAdmin } = useIsAdmin();
   const navigate = useNavigate();
   const [name, setName] = useState('');
@@ -39,6 +39,26 @@ const ProfilePage = () => {
   const [calibHeight, setCalibHeight] = useState('');
   const [calibUnit, setCalibUnit] = useState<'inches' | 'feet'>('inches');
   const [calibBusy, setCalibBusy] = useState(false);
+  const [capacityInput, setCapacityInput] = useState('');
+  const [capacityBusy, setCapacityBusy] = useState(false);
+
+  useEffect(() => {
+    setCapacityInput(device?.capacity_liters ? String(device.capacity_liters) : '');
+  }, [device?.capacity_liters]);
+
+  const handleSaveCapacity = async () => {
+    const liters = Number(capacityInput);
+    if (!capacityInput.trim() || !Number.isFinite(liters) || liters <= 0) {
+      toast.error('Enter a valid capacity in litres');
+      return;
+    }
+    setCapacityBusy(true);
+    const result = await updateCapacity(liters);
+    setCapacityBusy(false);
+    if (result.success) toast.success('Tank capacity saved');
+    else toast.error(result.error || 'Failed to save capacity');
+  };
+
 
   const handleStartCalibration = async () => {
     if (!device) return;
@@ -314,7 +334,41 @@ const ProfilePage = () => {
           )}
         </div>
 
+        {/* Tank Capacity */}
+        {device && (
+          <div className="water-card space-y-3">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Droplets className="h-4 w-4 text-primary" /> Tank Capacity
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Enter your tank's maximum capacity in litres so levels can be shown in litres
+              instead of percent.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={50}
+                max={1000000}
+                placeholder="e.g. 1000"
+                value={capacityInput}
+                onChange={e => setCapacityInput(e.target.value)}
+                className="flex-1"
+              />
+              <Button onClick={handleSaveCapacity} disabled={capacityBusy} size="sm">
+                {capacityBusy ? '...' : 'Save'}
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              {device.capacity_liters
+                ? `Current capacity: ${device.capacity_liters.toLocaleString()} L`
+                : 'Not set — litre figures stay hidden until you set this.'}
+            </p>
+          </div>
+        )}
+
         {/* Notification Settings */}
+
         <div className="water-card space-y-4">
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Bell className="h-4 w-4 text-primary" /> Notification Settings

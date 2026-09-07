@@ -7,6 +7,7 @@ interface Device {
   system_key: string;
   device_name: string;
   created_at: string;
+  capacity_liters: number | null;
 }
 
 interface DeviceContextType {
@@ -15,6 +16,7 @@ interface DeviceContextType {
   pairDevice: (systemKey: string) => Promise<{ success: boolean; error?: string }>;
   unpairDevice: () => Promise<void>;
   updateDeviceName: (name: string) => Promise<void>;
+  updateCapacity: (liters: number) => Promise<{ success: boolean; error?: string }>;
   refetch: () => Promise<void>;
 }
 
@@ -24,8 +26,10 @@ const DeviceContext = createContext<DeviceContextType>({
   pairDevice: async () => ({ success: false }),
   unpairDevice: async () => {},
   updateDeviceName: async () => {},
+  updateCapacity: async () => ({ success: false }),
   refetch: async () => {},
 });
+
 
 export const useDevice = () => useContext(DeviceContext);
 
@@ -108,9 +112,25 @@ export const DeviceProvider = ({ children }: { children: ReactNode }) => {
     setDevice(prev => prev ? { ...prev, device_name: name } : null);
   };
 
+  const updateCapacity = async (liters: number): Promise<{ success: boolean; error?: string }> => {
+    if (!device) return { success: false, error: 'No device paired' };
+    if (!Number.isFinite(liters) || liters < 50 || liters > 1_000_000) {
+      return { success: false, error: 'Enter a capacity between 50 and 1,000,000 litres' };
+    }
+    const value = Math.round(liters);
+    const { error } = await supabase
+      .from('devices')
+      .update({ capacity_liters: value } as any)
+      .eq('id', device.id);
+    if (error) return { success: false, error: error.message };
+    setDevice(prev => prev ? { ...prev, capacity_liters: value } : null);
+    return { success: true };
+  };
+
   return (
-    <DeviceContext.Provider value={{ device, loading, pairDevice, unpairDevice, updateDeviceName, refetch: fetchDevice }}>
+    <DeviceContext.Provider value={{ device, loading, pairDevice, unpairDevice, updateDeviceName, updateCapacity, refetch: fetchDevice }}>
       {children}
     </DeviceContext.Provider>
   );
 };
+
