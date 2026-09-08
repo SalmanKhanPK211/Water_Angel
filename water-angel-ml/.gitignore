@@ -1,0 +1,28 @@
+# Environment variables
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Model files (XGBoost, scikit-learn, etc.)
+*.pkl
+*.joblib
+*.h5
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# IDE settings
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# OS junk files
+.DS_Store
+Thumbs.db
