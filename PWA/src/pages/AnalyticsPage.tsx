@@ -1,13 +1,18 @@
-import { useWeeklySensorData, useSensorHistory } from '@/hooks/use-water-data';
+import { useWeeklySensorData } from '@/hooks/use-water-data';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { useDailyUsage } from '@/hooks/use-daily-usage';
-import { formatLiters } from '@/lib/water-utils';
+import { useMlPredictions } from '@/hooks/use-ml-predictions';
+import { useDevice } from '@/hooks/useDevice';
+import { formatLiters, litersFromPercent } from '@/lib/water-utils';
+import { downloadWeeklyReport } from '@/lib/weekly-report';
+import { Button } from '@/components/ui/button';
+import { toast } from '@/hooks/use-toast';
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
-import { TrendingUp, Droplets, Gauge, Zap, Award } from 'lucide-react';
+import { TrendingUp, Droplets, Gauge, Zap, Download } from 'lucide-react';
 import MlPredictionPanel from '@/components/analytics/MlPredictionPanel';
-import AnomalyDetectionCard from '@/components/analytics/AnomalyDetectionCard';
+import TimeToEmptyCard from '@/components/TimeToEmptyCard';
 
 
 const chartTooltipStyle = {
@@ -19,7 +24,6 @@ const chartTooltipStyle = {
 
 const AnalyticsPage = () => {
   const { data: weeklyData, loading } = useWeeklySensorData();
-  const { data: history24h } = useSensorHistory(24);
   const analytics = useAnalytics(weeklyData);
   const { data: dailyUsage } = useDailyUsage(7);
 
@@ -52,21 +56,55 @@ const AnalyticsPage = () => {
     : analytics.dailyConsumption;
   const litersWeekTotal = dailyUsage.reduce((s, d) => s + d.liters_used, 0);
 
+  const { weeklyForecast } = useMlPredictions();
+  const forecastRows = weeklyForecast ? [weeklyForecast] : [];
+  const { device } = useDevice();
+  const capacity = device?.capacity_liters ?? null;
+  const forecastInLiters = true;
+
+  const handleDownload = () => {
+    if (!device) {
+      toast({ title: 'No device paired', description: 'Pair your device to download a report.' });
+      return;
+    }
+    downloadWeeklyReport({
+      deviceName: device.device_name || 'Water Angel',
+      deviceId: device.id,
+      capacityLiters: capacity,
+      weekly: weeklyData,
+      dailyUsage,
+      forecast: forecastRows.map(p => {
+        const value = Number(p.predicted_value) || 0;
+        const isL = String(p.metadata?.unit ?? '').startsWith('liters');
+        return {
+          date: p.target_date,
+          liters: isL ? value : capacity ? litersFromPercent(value, capacity) : null,
+          percent: value,
+        };
+      }),
+      forecastUnit: forecastInLiters ? 'liters' : 'percent',
+    });
+    toast({ title: 'Report downloaded', description: 'Open the file to view or print it.' });
+  };
 
   return (
     <div className="min-h-screen bg-background pb-20">
       <div className="bg-card border-b border-border px-4 py-4 sticky top-0 z-40">
-        <div className="max-w-lg mx-auto">
+        <div className="max-w-lg mx-auto flex items-center justify-between gap-2">
           <h1 className="text-lg font-bold text-foreground">Analytics</h1>
+          <Button size="sm" variant="outline" onClick={handleDownload} className="gap-1.5">
+            <Download className="h-4 w-4" /> Weekly report
+          </Button>
         </div>
       </div>
+
 
       <div className="max-w-lg mx-auto px-4 py-4 space-y-4">
         {/* Water consumption forecast (published by the Python model) */}
         <MlPredictionPanel />
 
-        {/* Anomaly detection (computed live in the app) */}
-        <AnomalyDetectionCard history={history24h} />
+        {/* Live time-to-empty (computed in the app from last 6 h) */}
+        <TimeToEmptyCard />
 
         {/* Water Level History */}
         <div className="water-card">
@@ -158,69 +196,6 @@ const AnalyticsPage = () => {
                 <Bar dataKey="runs" fill="hsl(var(--safe))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Data Science Insights */}
-        <div className="water-card">
-          <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-            <Award className="h-4 w-4 text-primary" /> Data Insights
-          </h3>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Estimated Time to Empty</span>
-              <span className="text-sm font-semibold text-foreground">{analytics.estimatedEmptyTime}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Peak Usage Period</span>
-              <span className="text-sm font-semibold text-foreground">{analytics.peakUsageHour}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Avg TDS (Week)</span>
-              <span className="text-sm font-semibold text-foreground">{analytics.avgTdsWeek} ppm</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Avg TDS (Today)</span>
-              <span className="text-sm font-semibold text-foreground">{analytics.avgTdsToday} ppm</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground">Quality Trend</span>
-              <span className={`text-sm font-semibold ${analytics.tdsQualityTrend === 'degrading' ? 'status-critical' : analytics.tdsQualityTrend === 'improving' ? 'status-safe' : 'text-foreground'}`}>
-                {analytics.tdsQualityTrend.charAt(0).toUpperCase() + analytics.tdsQualityTrend.slice(1)}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* Water Efficiency Score */}
-        <div className="water-card text-center">
-          <h3 className="text-sm font-semibold text-foreground mb-2">Water Efficiency Score</h3>
-          <div className="relative w-24 h-24 mx-auto">
-            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-              <circle cx="50" cy="50" r="40" fill="none" stroke="hsl(var(--muted))" strokeWidth="8" />
-              <circle
-                cx="50" cy="50" r="40" fill="none"
-                stroke="hsl(var(--primary))" strokeWidth="8"
-                strokeDasharray={`${analytics.waterEfficiencyScore * 2.51} 251`}
-                strokeLinecap="round"
-                className="transition-all duration-1000"
-              />
-            </svg>
-            <span className="absolute inset-0 flex items-center justify-center text-xl font-bold text-foreground">
-              {analytics.waterEfficiencyScore}
-            </span>
-          </div>
-        </div>
-
-        {/* Weekly Report */}
-        <div className="water-card">
-          <h3 className="text-sm font-semibold text-foreground mb-3">📊 Weekly Smart Report</h3>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between"><span className="text-muted-foreground">Total Water Used</span><span className="font-semibold text-foreground">{analytics.totalWaterUsed}% level drop</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Avg Daily Usage</span><span className="font-semibold text-foreground">{analytics.avgDailyUsage}%</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Highest Usage Day</span><span className="font-semibold text-foreground">{analytics.highestUsageDay}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Avg TDS</span><span className="font-semibold text-foreground">{analytics.avgTdsWeek} ppm</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Pump Activations</span><span className="font-semibold text-foreground">{analytics.totalPumpRuns}</span></div>
           </div>
         </div>
 

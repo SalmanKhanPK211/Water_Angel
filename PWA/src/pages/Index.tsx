@@ -4,7 +4,7 @@ import MetricCards from '@/components/MetricCards';
 import MiniChart from '@/components/MiniChart';
 import InsightCards from '@/components/InsightCards';
 import ApiStatus from '@/components/ApiStatus';
-import TimeToEmptyCard from '@/components/TimeToEmptyCard';
+
 import { useLatestSensorData, useSensorHistory, useWeeklySensorData, usePumpSettings } from '@/hooks/use-water-data';
 import { useAnalytics } from '@/hooks/use-analytics';
 
@@ -36,9 +36,6 @@ const Index = () => {
             criticalThreshold={settings?.critical_threshold ?? 25}
           />
         </div>
-
-        {/* Time to Empty (computed live in the app) */}
-        <TimeToEmptyCard />
 
         {/* Metric Cards */}
         <MetricCards data={latest} />

@@ -77,5 +77,10 @@ export function useMlPredictions() {
     ? predictions.reduce((max, p) => (p.created_at > max ? p.created_at : max), predictions[0].created_at)
     : null;
 
-  return { predictions, timeToEmpty, dailyConsumption, anomalies, lastRun, loading, refetch: fetchPredictions };
+  // Weekly forecast: newest row (by created_at) of type weekly_consumption.
+  const weeklyForecast = predictions
+    .filter(p => p.prediction_type === 'weekly_consumption')
+    .reduce<MlPrediction | null>((best, p) => (!best || p.created_at > best.created_at ? p : best), null);
+
+  return { predictions, timeToEmpty, dailyConsumption, weeklyForecast, anomalies, lastRun, loading, refetch: fetchPredictions };
 }

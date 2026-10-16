@@ -63,7 +63,7 @@ export function computeTimeToEmpty(readings: SensorData[]): TimeToEmptyResult {
   const empty: TimeToEmptyResult = {
     state: 'collecting',
     hours: null,
-    label: 'Collecting data',
+    label: '—',
     emptyAt: null,
     drainRatePctPerHour: 0,
     currentLevel: ordered.length ? ordered[ordered.length - 1].water_level : 0,
@@ -97,7 +97,7 @@ export function computeTimeToEmpty(readings: SensorData[]): TimeToEmptyResult {
     return {
       ...empty,
       state: rates.length === 0 ? 'idle' : 'collecting',
-      label: rates.length === 0 ? 'No usage detected' : 'Collecting data',
+      label: rates.length === 0 ? 'No usage detected' : '—',
       currentLevel,
       usableDeltas: rates.length,
     };

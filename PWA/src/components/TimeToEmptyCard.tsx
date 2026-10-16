@@ -31,21 +31,26 @@ const TimeToEmptyCard = () => {
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <Hourglass className="h-4 w-4 text-primary" /> Time to Empty
         </h3>
-        <span className="text-[10px] text-muted-foreground">Live · last 6 h</span>
       </div>
 
-      <p
-        className={`text-2xl font-bold ${
-          tte.state === 'ok' ? 'text-foreground' : 'text-muted-foreground'
-        }`}
-      >
-        {tte.label}
-      </p>
+      {tte.label && tte.label !== '—' && (
+        <p
+          className={`text-2xl font-bold ${
+            tte.state === 'ok' ? 'text-foreground' : 'text-muted-foreground'
+          }`}
+        >
+          {tte.label}
+        </p>
+      )}
 
-      <div className="bg-muted/50 rounded-lg p-2 text-center">
-        <p className="text-[10px] text-muted-foreground">Empty at</p>
-        <p className="text-xs font-semibold text-foreground">{emptyAtLabel}</p>
-      </div>
+      {tte.state === 'ok' && (
+        <div className="bg-muted/50 rounded-lg p-2 text-center">
+          <p className="text-[10px] text-muted-foreground">Empty at</p>
+          <p className="text-xs font-semibold text-foreground">{emptyAtLabel}</p>
+        </div>
+      )}
+
+
 
 
       <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">

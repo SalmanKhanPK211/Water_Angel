@@ -74,52 +74,62 @@ Deno.serve(async (req) => {
       return json({ device_id: deviceId, data: data ?? [] });
     }
 
-    // C) POST /api/predictions  ->  body: [{ device_id, target_date, predicted_value }, ...]
+    // C) POST /api/predictions
+    //   Weekly (default): [{ device_id, target_date (week start), predicted_value (L/week), week_end?, model_version? }]
+    //   Daily (legacy):   rows with prediction_type: 'daily_consumption'
     if (req.method === 'POST' && /^\/api\/predictions\/?$/.test(path)) {
       const body = await req.json().catch(() => null);
-      const items: any[] = Array.isArray(body) ? body : Array.isArray(body?.predictions) ? body.predictions : [];
+      const items: any[] = Array.isArray(body) ? body : Array.isArray(body?.predictions) ? body.predictions : body && typeof body === 'object' && body.device_id ? [body] : [];
       if (items.length === 0 || items.length > 62) {
         return json({ error: 'Body must be an array of 1-62 prediction rows' }, 400);
       }
 
       const predictionDate = new Date().toISOString().slice(0, 10);
       const rows: any[] = [];
-      const deviceIds = new Set<string>();
 
       for (const p of items) {
         const deviceId = String(p?.device_id ?? '');
         const targetDate = String(p?.target_date ?? '');
         const value = Number(p?.predicted_value);
+        const type = p?.prediction_type === 'daily_consumption' ? 'daily_consumption' : 'weekly_consumption';
         if (!UUID_RE.test(deviceId) || !DATE_RE.test(targetDate) || !Number.isFinite(value)) {
           return json({ error: `Bad row: ${JSON.stringify(p)}` }, 400);
         }
         const conf = Number(p?.confidence);
-        deviceIds.add(deviceId);
+        const weekly = type === 'weekly_consumption';
+        const weekEnd = DATE_RE.test(String(p?.metadata?.week_end ?? p?.week_end ?? ''))
+          ? String(p?.metadata?.week_end ?? p?.week_end)
+          : new Date(Date.parse(`${targetDate}T00:00:00Z`) + 6 * 86400000).toISOString().slice(0, 10);
         rows.push({
           device_id: deviceId,
-          prediction_type: 'daily_consumption',
-          model_version: 'xgb-v1',
+          prediction_type: type,
+          model_version: String(p?.model_version ?? (weekly ? 'prophet-v1' : 'xgb-v1')).slice(0, 40),
           prediction_date: predictionDate,
           target_date: targetDate,
           target_time: `${targetDate}T00:00:00Z`,
           predicted_value: value,
           confidence: Number.isFinite(conf) ? Math.min(Math.max(conf, 0), 1) : 0.9,
-          metadata: { unit: 'liters_per_day', ...(p?.metadata ?? {}) },
+          metadata: weekly
+            ? { ...(p?.metadata ?? {}), unit: 'liters_per_week', week_start: targetDate, week_end: weekEnd }
+            : { unit: 'liters_per_day', ...(p?.metadata ?? {}) },
         });
       }
 
-      // Replace the previous forecast for each device in the payload.
-      const { error: delError } = await admin
-        .from('ml_predictions')
-        .delete()
-        .in('device_id', [...deviceIds])
-        .eq('prediction_type', 'daily_consumption');
-      if (delError) throw delError;
+      // One row per device per target week/day: delete existing, then insert.
+      for (const r of rows) {
+        const { error: delError } = await admin
+          .from('ml_predictions')
+          .delete()
+          .eq('device_id', r.device_id)
+          .eq('prediction_type', r.prediction_type)
+          .eq('target_date', r.target_date);
+        if (delError) throw delError;
+      }
 
       const { error: insError } = await admin.from('ml_predictions').insert(rows);
       if (insError) throw insError;
 
-      return json({ ok: true, devices: deviceIds.size, written: rows.length });
+      return json({ ok: true, devices: new Set(rows.map(r => r.device_id)).size, written: rows.length });
     }
 
     return json({ error: `Unknown route: ${req.method} ${path}` }, 404);
