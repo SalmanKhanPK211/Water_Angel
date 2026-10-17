@@ -5,15 +5,15 @@ from fastapi import FastAPI, Query, HTTPException
 import uvicorn
 
 from data_loader import fetch_devices, fetch_daily_usage, fetch_all_historical_data
-from feature_pipeline import prepare_training_data
+from feature_pipeline import split_train_test_chronological
 from evaluator import evaluate_models
 from weekly_forecaster import generate_weekly_forecast
 from db_publisher import publish_weekly_predictions
 
 app = FastAPI(
     title="Water Angel - ML Weekly Consumption Forecaster",
-    description="End-to-end forecasting microservice producing single-figure weekly water consumption estimates (e.g. 742.5 L) using evaluated candidate ML algorithms.",
-    version="2.0.0"
+    description="Production-grade, leak-free weekly forecasting microservice producing single-figure water consumption estimates (e.g. 1041.9 L) persisted to Supabase.",
+    version="2.1.0"
 )
 
 # Global caches for trained models
@@ -21,6 +21,20 @@ BEST_MODEL = None
 BEST_MODEL_NAME = None
 BENCHMARK_RESULTS = None
 LAST_TRAIN_TIME = None
+
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "service": "Water Angel ML Weekly Forecaster",
+        "version": "2.1.0",
+        "endpoints": {
+            "health": "/health",
+            "predict": "/predict",
+            "benchmark": "/benchmark",
+            "docs": "/docs"
+        }
+    }
 
 @app.get("/health")
 def health():
@@ -35,7 +49,7 @@ def health():
 @app.get("/benchmark")
 def run_benchmark():
     """
-    Executes TimeSeriesSplit cross-validation across all candidate algorithms 
+    Executes leak-free chronological panel cross-validation across all candidate algorithms 
     and returns the comparative performance table.
     """
     global BEST_MODEL, BEST_MODEL_NAME, BENCHMARK_RESULTS, LAST_TRAIN_TIME
@@ -45,12 +59,12 @@ def run_benchmark():
     if df.empty:
         raise HTTPException(status_code=400, detail="No historical usage data found in Supabase.")
 
-    X, y = prepare_training_data(df)
-    if len(X) < 30:
-        raise HTTPException(status_code=400, detail="Insufficient feature rows after pipeline processing.")
+    train_df, test_df, clipping_bounds = split_train_test_chronological(df, test_days=30)
+    if len(train_df) < 30 or len(test_df) < 7:
+        raise HTTPException(status_code=400, detail="Insufficient feature rows after chronological splitting.")
 
-    print(f"[PIPELINE] Evaluating candidate models on {len(X)} training samples...")
-    results_df, best_name, best_instance = evaluate_models(X, y)
+    print(f"[PIPELINE] Evaluating candidate models on {len(train_df)} training samples (8-day purge gap)...")
+    results_df, best_name, best_instance = evaluate_models(train_df=train_df, test_df=test_df)
 
     BEST_MODEL = best_instance
     BEST_MODEL_NAME = best_name
@@ -59,7 +73,8 @@ def run_benchmark():
 
     return {
         "status": "success",
-        "samples_analyzed": len(X),
+        "training_samples": len(train_df),
+        "test_samples": len(test_df),
         "best_algorithm_selected": best_name,
         "comparison_table": BENCHMARK_RESULTS,
         "trained_at": LAST_TRAIN_TIME.isoformat()
@@ -68,7 +83,7 @@ def run_benchmark():
 @app.get("/predict")
 def run_forecast(device_id: Optional[str] = Query(None, description="Optional single device UUID")):
     """
-    Evaluates candidate models, selects the best algorithm, generates the single 
+    Evaluates candidate models, selects the optimal algorithm, generates the single 
     1-figure weekly forecast (xxxL) for the upcoming 7 days, and stores it in Supabase ml_predictions.
     """
     global BEST_MODEL, BEST_MODEL_NAME, LAST_TRAIN_TIME
@@ -82,8 +97,8 @@ def run_forecast(device_id: Optional[str] = Query(None, description="Optional si
         if df_all.empty:
             raise HTTPException(status_code=400, detail="No historical data found.")
 
-        X, y = prepare_training_data(df_all)
-        results_df, best_name, best_instance = evaluate_models(X, y)
+        train_df, test_df, clipping_bounds = split_train_test_chronological(df_all, test_days=30)
+        results_df, best_name, best_instance = evaluate_models(train_df=train_df, test_df=test_df)
 
         BEST_MODEL = best_instance
         BEST_MODEL_NAME = best_name
