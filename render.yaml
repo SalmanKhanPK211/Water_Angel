@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: water-angel-ml-forecasting
+    runtime: python
+    rootDir: water-angel-ml
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ML_GATEWAY_URL
+        value: https://pucmngrhhrzybuucrhuk.supabase.co/functions/v1/ml-gateway
+      - key: X_API_TOKEN
+        value: 2c64e922a51582a407793f24a532bcfda75d1d6b137adcb038a30fcd8eea1a97
