@@ -15,14 +15,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from data_loader import fetch_devices, fetch_daily_usage, fetch_all_historical_data
-from feature_pipeline import prepare_training_data
+from feature_pipeline import split_train_test_chronological
 from evaluator import evaluate_models
 from weekly_forecaster import generate_weekly_forecast
 from db_publisher import publish_weekly_predictions
 
 def main():
     print("\n" + "="*80)
-    print(" [WATER ANGEL] - ML CANDIDATE ALGORITHMS BENCHMARK & WEEKLY FORECAST")
+    print(" [WATER ANGEL] - LEAK-FREE CANDIDATE ALGORITHMS BENCHMARK & WEEKLY FORECAST")
     print("="*80)
 
     # 1. Ingestion
@@ -34,17 +34,19 @@ def main():
 
     print(f"[OK] Retrieved {len(df)} total daily records across registered devices.")
 
-    # 2. Feature Engineering
-    print("\n[STEP 2] Running weekly feature pipeline (Lags, Rolling stats, Weekly ground truth)...")
-    X, y = prepare_training_data(df)
-    print(f"[OK] Formed {len(X)} training samples with {X.shape[1]} features.")
+    # 2. Leak-Free Chronological Splitting & Preprocessing
+    print("\n[STEP 2] Running leak-free chronological panel partitioning & feature engineering...")
+    train_df, test_df, clipping_bounds = split_train_test_chronological(df, test_days=30)
+    print(f"[OK] Training partition:   {len(train_df)} samples ({train_df['usage_date'].min().date()} to {train_df['usage_date'].max().date()})")
+    print(f"[OK] Embargo Purge Gap:    8 days buffer (zero target or feature overlap)")
+    print(f"[OK] Holdout Test partition: {len(test_df)} samples ({test_df['usage_date'].min().date()} to {test_df['usage_date'].max().date()})")
 
-    # 3. Model Benchmark & Evaluation
-    print("\n[STEP 3] Benchmarking candidate ML algorithms using TimeSeriesSplit (5 folds)...")
-    results_df, best_name, best_model = evaluate_models(X, y, test_days=30, plot_path="model_comparison.png")
+    # 3. Model Benchmark & Evaluation with Purged Date Cross-Validation
+    print("\n[STEP 3] Benchmarking candidate ML algorithms using Purged Date-CV (5 folds)...")
+    results_df, best_name, best_model = evaluate_models(train_df=train_df, test_df=test_df, plot_path="model_comparison.png")
 
     print("\n" + "="*95)
-    print(" [BENCHMARK] CANDIDATE ALGORITHMS BENCHMARK COMPARISON TABLE")
+    print(" [BENCHMARK] CANDIDATE ALGORITHMS BENCHMARK COMPARISON TABLE (LEAK-FREE)")
     print("="*95)
     print(results_df.to_string(index=False))
     print("="*95)
@@ -78,7 +80,7 @@ def main():
         res = publish_weekly_predictions(predictions)
         print(f"[OK] Database response: {res}")
 
-    print("\n[SUCCESS] Benchmark and weekly forecasting pipeline completed successfully!\n")
+    print("\n[SUCCESS] Leak-free benchmark and weekly forecasting pipeline completed successfully!\n")
 
 if __name__ == "__main__":
     main()

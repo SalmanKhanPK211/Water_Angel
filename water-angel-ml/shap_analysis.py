@@ -19,35 +19,36 @@ from PIL import Image, ImageDraw, ImageFont
 import xgboost as xgb
 
 from data_loader import fetch_all_historical_data
-from feature_pipeline import engineer_weekly_features
+from feature_pipeline import split_train_test_chronological
 from config import FEATURES
 
 def run_shap_analysis(output_dir: str = "."):
     """
     Dedicated standalone SHAP analysis module for Water Angel weekly forecasting.
     Renders clean, spacious, high-resolution individual and combined plots 
-    with zero text congestion or title collisions.
+    with zero text congestion, fitted on leak-free chronologically partitioned data.
     """
     print("="*80)
-    print(" [WATER ANGEL] - SHAP FEATURE INTERPRETABILITY ANALYSIS")
+    print(" [WATER ANGEL] - LEAK-FREE SHAP FEATURE INTERPRETABILITY ANALYSIS")
     print("="*80)
 
-    # 1. Fetch data & prepare features
+    # 1. Fetch data & prepare features with zero leakage
     print("\n[STEP 1] Fetching historical consumption dataset from Supabase...")
     df = fetch_all_historical_data(days=365)
     if df.empty:
         raise ValueError("No historical daily data available.")
 
-    print(f"[OK] Retrieved {len(df)} records. Engineering weekly features...")
-    featured_df = engineer_weekly_features(df, is_training=True)
-    clean_data = featured_df.dropna(subset=FEATURES + ["target_weekly_liters"]).reset_index(drop=True)
+    print(f"[OK] Retrieved {len(df)} records. Applying leak-free chronological partitioning...")
+    train_df, test_df, clipping_bounds = split_train_test_chronological(df, test_days=30)
 
-    X = clean_data[FEATURES]
-    y = clean_data["target_weekly_liters"]
-    print(f"[OK] Training dataset prepared: {len(X)} rows across {len(FEATURES)} features.")
+    X_train = train_df[FEATURES]
+    y_train = train_df["target_weekly_liters"]
+    X_test  = test_df[FEATURES]
+    print(f"[OK] Leak-free training samples: {len(X_train)} rows across {len(FEATURES)} features.")
+    print(f"[OK] Out-of-sample test samples: {len(X_test)} rows.")
 
-    # 2. Train XGBoost Model
-    print("\n[STEP 2] Fitting XGBoost model for TreeExplainer...")
+    # 2. Train XGBoost Model on Training Partition Only
+    print("\n[STEP 2] Fitting XGBoost model on leak-free training partition...")
     model = xgb.XGBRegressor(
         n_estimators=80,
         max_depth=3,
@@ -58,12 +59,12 @@ def run_shap_analysis(output_dir: str = "."):
         colsample_bytree=0.8,
         random_state=42
     )
-    model.fit(X, y)
+    model.fit(X_train, y_train)
 
-    # 3. Compute SHAP Values
-    print("[STEP 3] Computing SHAP values using TreeExplainer...")
+    # 3. Compute Out-of-Sample SHAP Values
+    print("[STEP 3] Computing out-of-sample SHAP values using TreeExplainer...")
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer(X)
+    shap_values = explainer(X_test)
 
     # Feature Importance Table
     mean_abs_shap = np.abs(shap_values.values).mean(axis=0)
@@ -140,7 +141,7 @@ def run_shap_analysis(output_dir: str = "."):
         font_sub = ImageFont.load_default()
 
     draw.text((60, 35), header_text, fill="#0f172a", font=font_title)
-    draw.text((60, 95), "Global Impact Magnitude (|Mean SHAP|) vs. Directional Feature Value Attribution", fill="#475569", font=font_sub)
+    draw.text((60, 95), "Global Impact Magnitude (|Mean SHAP|) vs. Directional Feature Value Attribution (Out-of-Sample)", fill="#475569", font=font_sub)
 
     # Paste subplots
     composite.paste(img_bar_resized, (50, banner_height))
@@ -151,11 +152,11 @@ def run_shap_analysis(output_dir: str = "."):
     print(f"[OK] Flawless composite image saved to: {combined_path}")
 
     print("\n" + "="*80)
-    print(" TOP 10 SHAP PREDICTIVE FEATURES (WATER ANGEL)")
+    print(" TOP 10 SHAP PREDICTIVE FEATURES (WATER ANGEL - LEAK-FREE)")
     print("="*80)
     print(importance_df.head(10).to_string(index=False))
     print("="*80)
-    print("\n[SUCCESS] Dedicated SHAP analysis script finished cleanly!\n")
+    print("\n[SUCCESS] Leak-free SHAP analysis script finished cleanly!\n")
 
 if __name__ == "__main__":
     run_shap_analysis()
