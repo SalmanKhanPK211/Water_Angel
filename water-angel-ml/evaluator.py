@@ -142,8 +142,9 @@ def evaluate_models(
 
     results_df = pd.DataFrame(evaluation_records).sort_values("Test MAE (L)", ascending=True).reset_index(drop=True)
 
-    # Winning algorithm has lowest Test MAE / MAPE
-    best_model_name = results_df.iloc[0]["Model Name"]
+    # Winning production algorithm has lowest Test MAE / MAPE (excluding static dummy baselines)
+    ml_candidates = results_df[~results_df["Model Name"].str.contains("Baseline", case=False)]
+    best_model_name = ml_candidates.iloc[0]["Model Name"] if not ml_candidates.empty else results_df.iloc[0]["Model Name"]
     best_model_instance = trained_models[best_model_name]
 
     # Plot comparison chart
