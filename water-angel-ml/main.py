@@ -81,7 +81,10 @@ def run_benchmark():
     }
 
 @app.get("/predict")
-def run_forecast(device_id: Optional[str] = Query(None, description="Optional single device UUID")):
+def run_forecast(
+    device_id: Optional[str] = Query(None, description="Optional single device UUID"),
+    verbose: bool = Query(False, description="Set to true to return verbose prediction payload")
+):
     """
     Evaluates candidate models, selects the optimal algorithm, generates the single 
     1-figure weekly forecast (xxxL) for the upcoming 7 days, and stores it in Supabase ml_predictions.
@@ -136,6 +139,13 @@ def run_forecast(device_id: Optional[str] = Query(None, description="Optional si
     publish_result = {}
     if forecast_records:
         publish_result = publish_weekly_predictions(forecast_records)
+
+    if not verbose:
+        return {
+            "status": "success",
+            "forecasts": len(forecast_records),
+            "synced": publish_result.get("ok", False)
+        }
 
     return {
         "status": "success",
